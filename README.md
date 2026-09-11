@@ -51,7 +51,9 @@ Uma janela com o gráfico, sliders e botão "Lançar" deve abrir automaticamente
 
 ## Autores
 
-- (preencher com os nomes do grupo)
+- Paulo Eduardo Silva
+- Pedro Zeferino Bittencourt 
+- Laura Coelho de Oliveira 
 
 ## Licença
 
