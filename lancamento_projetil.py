@@ -4,7 +4,7 @@ from matplotlib.widgets import Slider, Button
 from matplotlib.animation import FuncAnimation
 
 # ---------------------------------------------------------------------------
-# FÍSICA (separada da interface, conforme pedido no enunciado)
+# FÍSICA
 # ---------------------------------------------------------------------------
 
 def calcular_resultados(v0, theta_graus, y0, g):
@@ -19,7 +19,7 @@ def calcular_resultados(v0, theta_graus, y0, g):
     # Altura máxima
     y_max = y0 + (v0 * np.sin(theta)) ** 2 / (2 * g)
 
-    # Alcance horizontal (assumindo x0 = 0 por simplicidade; ajuste se quiser x0 != 0)
+    # Alcance horizontal (assumindo x0 = 0 por simplicidade)
     alcance = v0 * np.cos(theta) * t_voo
 
     return t_voo, y_max, alcance
@@ -93,12 +93,20 @@ slider_theta = Slider(eixo_theta, "θ (graus)", 1, 89, valinit=theta_init)
 slider_y0 = Slider(eixo_y0, "y0 (m)", 0, 50, valinit=y0_init)
 slider_g = Slider(eixo_g, "g (m/s²)", 1.6, 24.8, valinit=g_init)
 
+# Lista de sliders + suas cores de preenchimento originais 
+todos_sliders = [slider_v0, slider_theta, slider_y0, slider_g]
+cores_originais = [s.poly.get_facecolor() for s in todos_sliders]
+COR_DESABILITADO = "lightgray"
+
 # --- Botão "Lançar" ---
 eixo_botao = plt.axes([0.4, 0.05, 0.2, 0.05])
 botao_lancar = Button(eixo_botao, "Lançar")
 
 # Variável para guardar a animação ativa (evita que o garbage collector a mate)
 animacao_ativa = None
+
+# Flag de controle: True enquanto um lançamento está em andamento
+animando = False
 
 
 def atualizar_grafico(event=None):
@@ -127,17 +135,35 @@ def atualizar_grafico(event=None):
     texto_resultados.set_text(
         f"Alcance R = {alcance:.2f} m\n"
         f"Altura máxima ymax = {y_max:.2f} m\n"
-        f"Tempo de voo tvoo = {t_voo:.2f} s"
+        f"Tempo de voo = {t_voo:.2f} s"
     )
 
     fig.canvas.draw_idle()
 
 
+def travar_controles(travar):
+    """Habilita/desabilita sliders e o botão 'Lançar' enquanto uma animação
+    estiver em andamento, evitando cliques/alterações empilhadas."""
+    ativo = not travar
+    for slider, cor_original in zip(todos_sliders, cores_originais):
+        slider.set_active(ativo)
+        slider.poly.set_facecolor(COR_DESABILITADO if travar else cor_original)
+ 
+    botao_lancar.set_active(ativo)
+ 
+    # Feedback visual simples de que os controles estão bloqueados
+    botao_lancar.label.set_text("Lançando..." if travar else "Lançar")
+    fig.canvas.draw_idle()
+ 
+ 
 def lancar(event):
     """Chamada pelo botão 'Lançar'. Anima o ponto percorrendo a trajetória
-    já calculada."""
-    global animacao_ativa
-
+    já calculada. Ignora cliques enquanto uma animação já está rodando."""
+    global animacao_ativa, animando
+ 
+    if animando:
+        return  # já existe uma animação em andamento, ignora o clique
+ 
     v0 = slider_v0.val
     theta_graus = slider_theta.val
     y0 = slider_y0.val
@@ -147,13 +173,21 @@ def lancar(event):
     if not valido:
         texto_erro.set_text(mensagem)
         return
-
+ 
     x, y, _ = calcular_trajetoria(v0, theta_graus, y0, g)
-
+ 
+    animando = True
+    travar_controles(True)
+ 
     def frame_update(i):
         ponto_projetil.set_data([x[i]], [y[i]])
+        if i == len(x) - 1:
+            # último frame: libera os controles novamente
+            global animando
+            animando = False
+            travar_controles(False)
         return ponto_projetil,
-
+ 
     # interval controla a velocidade da animação (ms entre frames)
     animacao_ativa = FuncAnimation(
         fig, frame_update, frames=len(x), interval=15, blit=True, repeat=False
