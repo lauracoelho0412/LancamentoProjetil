@@ -43,13 +43,14 @@ Uma janela com o gráfico, sliders e botão "Lançar" deve abrir automaticamente
 - Sliders e botões travados durante uma animação, evitando lançamentos
   sobrepostos por engano
 - Botão "Sobrepor", exibido depois do primeiro lançamento, para ativar o modo
-  de comparação: a primeira trajetória é preservada e cada novo lançamento é
-  desenhado por cima dos anteriores, com cor própria. A escala permanece
-  estável e só aumenta quando necessário para enquadrar uma nova curva
+  de comparação: a primeira trajetória é preservada e o próximo lançamento é
+  desenhado por cima dela, com cor própria. A escala permanece estável e só
+  aumenta quando necessário para enquadrar a nova curva
+- Comparação limitada a 2 lançamentos simultâneos (`MAX_SOBREPOSTOS`). Ao
+  atingir esse limite, mexer em qualquer slider reinicia automaticamente o
+  histórico, sem precisar de um botão "Limpar"
 - Tabela comparativa (ao lado do gráfico) com v0, θ, y0, g, alcance, altura
   máxima e tempo de voo de cada lançamento sobreposto
-- Botão "Limpar" (visível durante o modo sobreposição) que remove todos os
-  lançamentos sobrepostos, esvazia a tabela e volta o gráfico ao modo normal
 - Tratamento de entradas inválidas (ângulo fora de 0–90°, velocidade ≤ 0, etc.)
 
 ## Estrutura do código
@@ -59,11 +60,16 @@ Uma janela com o gráfico, sliders e botão "Lançar" deve abrir automaticamente
 - `calcular_resultados()` — calcula R, ymax e tvoo
 - `entrada_valida()` — valida os parâmetros antes de calcular
 - `atualizar_grafico()` — callback chamado quando um slider muda (atualiza a
-  curva de prévia; não mexe nos eixos enquanto o modo sobreposição estiver ativo)
+  curva de prévia; reinicia a comparação automaticamente se o limite de
+  sobreposições já foi atingido; não mexe nos eixos enquanto o modo
+  sobreposição estiver ativo)
 - `lancar()` — callback do botão "Lançar", roda a animação na velocidade real
-  do voo e, no modo sobreposição, cria uma curva/ponto persistentes
+  do voo e, no modo sobreposição, cria uma curva/ponto persistentes. Para o
+  timer da animação explicitamente ao final, evitando lentidão acumulada em
+  lançamentos sucessivos
 - `alternar_sobreposicao()` — callback do botão "Sobrepor"
-- `limpar()` — callback do botão "Limpar"
+- `reiniciar_comparacao()` — limpa os lançamentos sobrepostos e volta ao modo
+  de lançamento único; chamada automaticamente pelo `atualizar_grafico()`
 - `atualizar_tabela()` — redesenha a tabela comparativa
 - `ajustar_eixos_lancamentos()` — reenquadra o gráfico para caber todos os
   lançamentos sobrepostos

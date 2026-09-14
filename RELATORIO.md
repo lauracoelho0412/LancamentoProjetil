@@ -14,9 +14,7 @@ A interface permite alterar a velocidade inicial, o ângulo, a altura inicial
 e a gravidade. Ela apresenta a trajetória, o alcance, a altura máxima e o
 tempo de voo. Durante a animação, os controles permanecem bloqueados. Depois
 do primeiro lançamento, o modo **Sobrepor** permite comparar novas
-trajetórias na mesma escala e registra os valores em uma tabela; o botão
-**Limpar** reinicia a experiência. A posição animada acompanha o tempo físico
-calculado, independentemente da quantidade de quadros renderizados.
+trajetórias na mesma escala e registra os valores em uma tabela. A posição animada acompanha o tempo físico calculado.
 
 Como teste, foram comparados lançamentos com `v0 = 40 m/s`, `y0 = 0 m` e
 `g = 9,8 m/s²`. Para 30°, o alcance foi 141,39 m, a altura máxima 20,41 m e o
@@ -27,3 +25,14 @@ Conclui-se que ângulos complementares apresentam o mesmo alcance quando a
 altura inicial é zero, enquanto ângulos maiores aumentam a altura e o tempo
 de voo. Entre os casos analisados, 45° produziu o maior alcance, de acordo
 com a teoria do lançamento oblíquo.
+
+## Dificuldades encontradas
+
+Ao permitir múltiplos lançamentos seguidos, percebemos que clicar várias
+vezes no botão de lançar fazia as animações se sobreporem de forma bagunçada
+e, com o tempo, deixava a interface mais lenta; o problema foi resolvido
+bloqueando os controles durante a animação e encerrando cada animação
+corretamente ao final. Já o recurso de comparar lançamentos passou por
+algumas versões até chegar em um fluxo mais simples: em vez de um botão
+separado para limpar o histórico, o próprio ajuste dos controles reinicia a
+comparação automaticamente.
