@@ -16,6 +16,7 @@ from fisica import calcular_resultados, calcular_trajetoria, entrada_valida
 CORES_LANCAMENTOS = ["crimson", "darkorange", "seagreen", "purple", "teal", "goldenrod"]
 COLUNAS_TABELA = ["#", "v0 (m/s)", "θ (°)", "y0 (m)", "g (m/s²)", "R (m)", "ymax (m)", "tvoo (s)"]
 COR_DESABILITADO = "lightgray"
+MAX_SOBREPOSTOS = 2  # número máximo de lançamentos comparados ao mesmo tempo
 
 
 # ---------------------------------------------------------------------------
@@ -68,19 +69,16 @@ def criar_figura(v0_init, theta_init, y0_init, g_init):
     todos_sliders = [slider_v0, slider_theta, slider_y0, slider_g]
     cores_originais = [s.poly.get_facecolor() for s in todos_sliders]
 
-    # --- Botões "Lançar" / "Sobrepor" / "Limpar" ---
-    eixo_botao_lancar = plt.axes([0.15, 0.05, 0.18, 0.05])
-    eixo_botao_sobrepor = plt.axes([0.36, 0.05, 0.18, 0.05])
-    eixo_botao_limpar = plt.axes([0.57, 0.05, 0.18, 0.05])
+    # --- Botões "Lançar" / "Sobrepor" ---
+    eixo_botao_lancar = plt.axes([0.22, 0.05, 0.25, 0.05])
+    eixo_botao_sobrepor = plt.axes([0.50, 0.05, 0.25, 0.05])
 
     botao_lancar = Button(eixo_botao_lancar, "Lançar")
     botao_sobrepor = Button(eixo_botao_sobrepor, "Sobrepor")
-    botao_limpar = Button(eixo_botao_limpar, "Limpar")
 
     eixo_botao_sobrepor.set_visible(False)
-    eixo_botao_limpar.set_visible(False)
 
-    todos_botoes = [botao_lancar, botao_sobrepor, botao_limpar]
+    todos_botoes = [botao_lancar, botao_sobrepor]
 
     return {
         "fig": fig,
@@ -97,10 +95,8 @@ def criar_figura(v0_init, theta_init, y0_init, g_init):
         "todos_sliders": todos_sliders,
         "cores_originais": cores_originais,
         "eixo_botao_sobrepor": eixo_botao_sobrepor,
-        "eixo_botao_limpar": eixo_botao_limpar,
         "botao_lancar": botao_lancar,
         "botao_sobrepor": botao_sobrepor,
-        "botao_limpar": botao_limpar,
         "todos_botoes": todos_botoes,
         # Estado mutável compartilhado entre as callbacks
         "animacao_ativa": None,
@@ -193,6 +189,16 @@ def atualizar_grafico(ctx, event=None):
     texto_resultados = ctx["texto_resultados"]
     texto_erro = ctx["texto_erro"]
 
+    # Se a comparação já atingiu o limite de lançamentos sobrepostos, mexer
+    # em qualquer slider reinicia automaticamente o histórico — o usuário
+    # está sinalizando que quer configurar um novo lançamento do zero.
+    if (
+        not ctx["animando"]
+        and ctx["modo_sobreposicao"]
+        and len(ctx["lancamentos"]) >= MAX_SOBREPOSTOS
+    ):
+        reiniciar_comparacao(ctx)
+
     v0 = ctx["slider_v0"].val
     theta_graus = ctx["slider_theta"].val
     y0 = ctx["slider_y0"].val
@@ -244,6 +250,28 @@ def travar_controles(ctx, travar):
     fig.canvas.draw_idle()
 
 
+def reiniciar_comparacao(ctx):
+    """Remove os lançamentos sobrepostos e volta ao estado de um único
+    lançamento por vez. Chamada automaticamente ao clicar em 'Lançar'
+    quando o limite de comparação (MAX_SOBREPOSTOS) já foi atingido."""
+    linha_trajetoria = ctx["linha_trajetoria"]
+    botao_sobrepor = ctx["botao_sobrepor"]
+ 
+    for entrada in ctx["lancamentos"]:
+        entrada["linha"].remove()
+        entrada["ponto"].remove()
+    ctx["lancamentos"].clear()
+    ctx["ultimo_lancamento_normal"] = None
+    ctx["modo_sobreposicao"] = False
+ 
+    botao_sobrepor.label.set_text("Sobrepor")
+    linha_trajetoria.set_color("steelblue")
+    linha_trajetoria.set_linestyle("-")
+    ctx["eixo_botao_sobrepor"].set_visible(False)
+ 
+    atualizar_tabela(ctx)
+ 
+ 
 def lancar(ctx, event=None):
     """Chamada pelo botão 'Lançar'. Anima o ponto percorrendo a trajetória já
     calculada, na velocidade real (duração da animação = tempo de voo)."""
@@ -303,6 +331,14 @@ def lancar(ctx, event=None):
             if not ctx["modo_sobreposicao"]:
                 ctx["eixo_botao_sobrepor"].set_visible(True)
             travar_controles(ctx, False)
+            # Para o timer da animação explicitamente. Sem isso, cada
+            # lançamento deixa uma conexão "draw_event" pendurada na
+            # figura, que vai se acumulando e deixando os lançamentos
+            # seguintes cada vez mais lentos (e o bloqueio, por
+            # consequência, parece nunca mais liberar corretamente).
+            if ctx["animacao_ativa"] is not None:
+                ctx["animacao_ativa"].event_source.stop()
+                ctx["animacao_ativa"] = None
         return ponto_ativo,
 
     ctx["animacao_ativa"] = FuncAnimation(
@@ -314,8 +350,10 @@ def lancar(ctx, event=None):
 
 def alternar_sobreposicao(ctx, event=None):
     """Chamada pelo botão 'Sobrepor'. Ativa o modo de comparação, no qual
-    o lançamento anterior e cada novo lançamento ficam desenhados juntos,
-    usando uma escala comum. A saída do modo é feita pelo botão 'Limpar'."""
+    o lançamento anterior e o próximo (limitado a MAX_SOBREPOSTOS) ficam
+    desenhados juntos, usando uma escala comum. Ao clicar em 'Lançar'
+    de novo depois de atingir o limite, a comparação é reiniciada
+    automaticamente (ver reiniciar_comparacao)."""
     fig = ctx["fig"]
     linha_trajetoria = ctx["linha_trajetoria"]
     botao_sobrepor = ctx["botao_sobrepor"]
@@ -325,7 +363,7 @@ def alternar_sobreposicao(ctx, event=None):
     if ctx["ultimo_lancamento_normal"] is None:
         return
     if ctx["modo_sobreposicao"] and ctx["lancamentos"]:
-        return  # já há comparação em andamento; use "Limpar" para sair
+        return
 
     ctx["modo_sobreposicao"] = not ctx["modo_sobreposicao"]
 
@@ -339,42 +377,11 @@ def alternar_sobreposicao(ctx, event=None):
         botao_sobrepor.label.set_text("Sobrepor: ON")
         linha_trajetoria.set_color("gray")
         linha_trajetoria.set_linestyle("--")
-        ctx["eixo_botao_limpar"].set_visible(True)
     else:
         botao_sobrepor.label.set_text("Sobrepor")
         linha_trajetoria.set_color("steelblue")
         linha_trajetoria.set_linestyle("-")
-        ctx["eixo_botao_limpar"].set_visible(False)
 
-    atualizar_grafico(ctx)
-    fig.canvas.draw_idle()
-
-
-def limpar(ctx, event=None):
-    """Chamada pelo botão 'Limpar'. Remove todos os lançamentos sobrepostos,
-    esvazia a tabela e sai do modo de comparação, voltando o gráfico ao
-    comportamento dinâmico (eixos que se ajustam à prévia)."""
-    fig = ctx["fig"]
-    linha_trajetoria = ctx["linha_trajetoria"]
-    botao_sobrepor = ctx["botao_sobrepor"]
-
-    if ctx["animando"]:
-        return
-
-    for entrada in ctx["lancamentos"]:
-        entrada["linha"].remove()
-        entrada["ponto"].remove()
-    ctx["lancamentos"].clear()
-    ctx["ultimo_lancamento_normal"] = None
-
-    ctx["modo_sobreposicao"] = False
-    botao_sobrepor.label.set_text("Sobrepor")
-    linha_trajetoria.set_color("steelblue")
-    linha_trajetoria.set_linestyle("-")
-    ctx["eixo_botao_limpar"].set_visible(False)
-    ctx["eixo_botao_sobrepor"].set_visible(False)
-
-    atualizar_tabela(ctx)
     atualizar_grafico(ctx)
     fig.canvas.draw_idle()
 
@@ -388,7 +395,6 @@ def conectar_eventos(ctx):
 
     ctx["botao_lancar"].on_clicked(lambda event: lancar(ctx))
     ctx["botao_sobrepor"].on_clicked(lambda event: alternar_sobreposicao(ctx))
-    ctx["botao_limpar"].on_clicked(lambda event: limpar(ctx))
 
 
 def iniciar_interface(v0_init=40.0, theta_init=45.0, y0_init=0.0, g_init=9.8):
